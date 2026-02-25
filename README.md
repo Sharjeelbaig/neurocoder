@@ -1,6 +1,6 @@
-# TinyMoE Coder
+# NeuroCoder
 
-TinyMoE Coder is a from-scratch, narrow-domain coding SLM for:
+NeuroCoder is a from-scratch, narrow-domain coding SLM for:
 
 - React + Tailwind landing page generation.
 - Patch-first code edit requests (unified diff output).
