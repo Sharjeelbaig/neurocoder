@@ -15,6 +15,7 @@ from infer.validators import apply_and_validate
 _COLOR_RE = re.compile(
     r"\b(bg|text|border)-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b"
 )
+_SPACING_RE = re.compile(r"\b(p|px|py|m|mx|my)-(\d{1,2})\b")
 
 _NEW_COLORS = [
     "emerald-500",
@@ -35,39 +36,53 @@ def generate_color_edit_examples(
     for idx, (path, content) in enumerate(files):
         if idx >= max_examples:
             break
-        match = _COLOR_RE.search(content)
-        if not match:
-            continue
+        patch = ""
+        instruction = ""
+        metadata: dict[str, str] = {"generator": "rule_template_v1"}
 
-        prefix = match.group(1)
-        old_color = match.group(0)
-        new_color = f"{prefix}-{_NEW_COLORS[idx % len(_NEW_COLORS)]}"
-        updated = content.replace(old_color, new_color, 1)
-        patch = generate_unified_diff(path, content, updated)
+        color_match = _COLOR_RE.search(content)
+        spacing_match = _SPACING_RE.search(content)
+
+        if color_match:
+            prefix = color_match.group(1)
+            old_color = color_match.group(0)
+            new_color = f"{prefix}-{_NEW_COLORS[idx % len(_NEW_COLORS)]}"
+            updated = content.replace(old_color, new_color, 1)
+            patch = generate_unified_diff(path, content, updated)
+            instruction = (
+                f"Change {prefix} color in {Path(path).name} from {old_color} to {new_color}. "
+                "Return a unified diff patch only."
+            )
+            metadata["old_color"] = old_color
+            metadata["new_color"] = new_color
+        elif spacing_match:
+            old_spacing = spacing_match.group(0)
+            axis = spacing_match.group(1)
+            new_spacing = f"{axis}-{(int(spacing_match.group(2)) + 2) % 10 or 4}"
+            updated = content.replace(old_spacing, new_spacing, 1)
+            patch = generate_unified_diff(path, content, updated)
+            instruction = (
+                f"Adjust spacing in {Path(path).name} from {old_spacing} to {new_spacing}. "
+                "Return a unified diff patch only."
+            )
+            metadata["old_spacing"] = old_spacing
+            metadata["new_spacing"] = new_spacing
+        else:
+            continue
 
         file_map = {path: content}
         apply_result, lint_ok, build_ok, notes = apply_and_validate(file_map, patch)
         if not (apply_result.ok and lint_ok and build_ok):
             continue
 
-        instruction = (
-            f"Change {prefix} color in {Path(path).name} from {old_color} to {new_color}. "
-            "Return a unified diff patch only."
-        )
-
         example = TrainExample(
-            id=f"syn-color-{idx}",
+            id=f"syn-edit-{idx}",
             source_license="SYNTHETIC",
             task_type="patch_edit",
             instruction=instruction,
             context_files=[SourceFile(path=path, content=content)],
             target_patch=patch,
-            metadata={
-                "generator": "rule_template_v1",
-                "quality_filter_notes": notes,
-                "old_color": old_color,
-                "new_color": new_color,
-            },
+            metadata={**metadata, "quality_filter_notes": notes},
         )
         examples.append(example)
 

@@ -31,6 +31,15 @@ def main() -> None:
             files.append((record["relative_path"], source.read_text(encoding="utf-8", errors="ignore")))
 
     examples = generate_color_edit_examples(files, max_examples=args.max_examples)
+    if not examples:
+        seed_files = [
+            (
+                "src/Hero.tsx",
+                "export default function Hero(){return <button className='bg-blue-500 px-4 py-2 text-white'>Start</button>}",
+            )
+        ]
+        examples = generate_color_edit_examples(seed_files, max_examples=1)
+
     out_path = Path(args.out)
     save_examples_jsonl(examples, out_path)
     print(f"generated {len(examples)} examples -> {out_path}")

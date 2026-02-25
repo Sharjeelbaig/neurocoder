@@ -40,3 +40,22 @@ curl -X POST http://127.0.0.1:8080/v1/task \
 ## Status
 
 This is a fast-track implementation scaffold for batches 1-10. The interfaces, validators, data pipeline, and runtime are implemented and testable. GPU-scale training, large dataset acquisition, and external benchmark runs require infrastructure and credentials.
+
+## Batch Commands
+
+```bash
+# Batch 2: ingest data with license gate
+python3 scripts/run_ingest.py /path/to/source-repo --out datasets/snapshot_v1
+
+# Batch 3: train tokenizer from scratch
+python3 scripts/train_tokenizer.py datasets/snapshot_v1/manifest.jsonl --out artifacts/tokenizer/tokenizer.json
+
+# Batch 6: synthetic instruction generation
+python3 scripts/gen_synthetic.py datasets/snapshot_v1/manifest.jsonl --out datasets/synthetic/sft_color_edits.jsonl
+
+# Batch 8: run narrow benchmark sample
+python3 scripts/run_benchmark.py benchmarks/suites/narrowcoder_v1_sample.jsonl --out benchmarks/results/local
+
+# Batch 9-10: package for HF and Ollama
+python3 scripts/package_release.py --tokenizer artifacts/tokenizer/tokenizer.json --out artifacts/release --model-name tinymoe-coder
+```

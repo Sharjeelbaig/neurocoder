@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import argparse
+import json
 
 from train.tokenizer import evaluate_tokenizer_quality, train_simple_tokenizer
 
@@ -20,7 +21,23 @@ def main() -> None:
     parser.add_argument("--out", default="artifacts/tokenizer/tokenizer.json")
     args = parser.parse_args()
 
-    corpus_files = [Path(path) for path in args.corpus]
+    corpus_files: list[Path] = []
+    for entry in args.corpus:
+        path = Path(entry)
+        if path.name == "manifest.jsonl":
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                if not raw.strip():
+                    continue
+                record = json.loads(raw)
+                source = Path(record["source_repo"]) / record["relative_path"]
+                if source.exists():
+                    corpus_files.append(source)
+            continue
+        corpus_files.append(path)
+
+    if not corpus_files:
+        raise SystemExit("no corpus files found")
+
     tokenizer = train_simple_tokenizer(corpus_files=corpus_files, vocab_size=args.vocab_size)
     out_path = Path(args.out)
     tokenizer.to_json(out_path)
