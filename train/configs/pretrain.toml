@@ -1,0 +1,13 @@
+stage = "pretrain"
+seed = 42
+global_batch_size = 16
+micro_batch_size = 2
+learning_rate = 0.0003
+warmup_steps = 200
+max_steps = 20000
+log_every = 10
+save_every = 500
+output_dir = "artifacts/checkpoints/pretrain"
+world_size = 1
+collapse_threshold = 0.02
+collapse_patience = 200

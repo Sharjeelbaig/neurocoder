@@ -175,7 +175,7 @@ class TrainExample:
             "source_license": self.source_license,
             "task_type": self.task_type,
             "instruction": self.instruction,
-            "context_files": [f.__dict__ for f in self.context_files],
+            "context_files": [asdict(f) for f in self.context_files],
             "target_patch": self.target_patch,
             "metadata": self.metadata,
         }

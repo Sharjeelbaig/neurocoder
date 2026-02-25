@@ -8,7 +8,7 @@ from typing import Protocol
 
 from infer.diff_utils import generate_unified_diff, validate_unified_diff
 from infer.schemas import OutputFile, TaskRequest, TaskResponse, ValidationResult
-from infer.validators import apply_and_validate
+from infer.validators import apply_and_validate, build_check, lint_react_tailwind
 
 _COLOR_TOKEN_RE = re.compile(
     r"\b(bg|text|border)-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b"
@@ -111,7 +111,8 @@ class TaskService:
         if request.task_type == "page_generate":
             generated_files = self.adapter.generate_page(request, prompt)
             file_map = {file.path: file.content for file in generated_files}
-            _, lint_ok, build_ok, notes = apply_and_validate(file_map, _noop_patch())
+            lint_ok, lint_notes = lint_react_tailwind(file_map)
+            build_ok, build_notes = build_check(file_map)
             return TaskResponse.create(
                 status="ok",
                 files=generated_files,
@@ -119,7 +120,7 @@ class TaskService:
                     apply_ok=True,
                     lint_ok=lint_ok,
                     build_ok=build_ok,
-                    notes=notes,
+                    notes=[*lint_notes, *build_notes],
                 ),
             )
 
@@ -179,6 +180,12 @@ class TaskService:
         return candidate
 
     def _repair_patch(self, request: TaskRequest, patch: str, notes: list[str]) -> str:
+        if not patch.strip():
+            regenerated = self.adapter.generate_patch(
+                request, self._compile_prompt(request) + "\nGenerate a minimal valid unified diff patch."
+            )
+            return self._constrained_patch(regenerated)
+
         valid, _ = validate_unified_diff(patch)
         if valid:
             return patch
@@ -187,10 +194,6 @@ class TaskService:
         if regenerated.strip():
             return self._constrained_patch(regenerated)
         return patch
-
-
-def _noop_patch() -> str:
-    return "--- a/__noop__\n+++ b/__noop__\n@@ -1 +1 @@\n-placeholder\n+placeholder\n"
 
 
 def _select_target_file(request: TaskRequest) -> tuple[str, str]:
