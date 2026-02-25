@@ -30,7 +30,7 @@ def _collect_corpus_files(
     include_datasets: bool,
 ) -> list[Path]:
     allowed = {".py", ".md", ".toml", ".json", ".tsx", ".ts", ".jsx", ".js", ".css", ".txt"}
-    blocked_dirs = {".git", "__pycache__", "artifacts"}
+    blocked_dirs = {".git", "__pycache__", "artifacts", ".venv", "venv", "node_modules"}
     if not include_datasets:
         blocked_dirs.add("datasets")
     files: list[Path] = []

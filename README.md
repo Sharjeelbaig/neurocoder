@@ -44,6 +44,29 @@ This is a fast-track implementation scaffold for batches 1-10. The interfaces, v
 ## Batch Commands
 
 ```bash
+# Build synthetic curriculum for coding + chat alignment
+python3 scripts/build_curriculum.py --out datasets/curriculum/coding_chat_v1.txt
+
+# Train from scratch (MoE checkpoint under 100MB with current defaults)
+python3 scripts/train_from_scratch.py \
+  --source-dir datasets/curriculum \
+  --include-datasets \
+  --out-dir artifacts/trained_v5 \
+  --hidden-size 256 --num-layers 8 --num-heads 8 --num-experts 4 \
+  --steps 500 --seq-len 256 --batch-size 6
+
+# Optional targeted alignment for critical prompts (hi / how are you / landing page)
+python3 scripts/align_responses.py \
+  --model-dir artifacts/trained_v5 \
+  --dataset datasets/curriculum/critical_alignment.txt \
+  --steps 320
+
+# Inference CLI (with deterministic quality fallback enabled by default)
+python3 scripts/infer_neurocoder.py --model-dir artifacts/release_v5a/hf --prompt "generate a landing page"
+
+# Raw model-only output (disable fallback)
+python3 scripts/infer_neurocoder.py --model-dir artifacts/release_v5a/hf --prompt "generate a landing page" --disable-fallback
+
 # Batch 2: ingest data with license gate
 python3 scripts/run_ingest.py /path/to/source-repo --out datasets/snapshot_v1
 
