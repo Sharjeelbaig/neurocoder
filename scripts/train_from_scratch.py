@@ -15,7 +15,6 @@ if str(ROOT) not in sys.path:
 
 from model.config import TinyMoEConfig
 from model.tiny_moe import TORCH_AVAILABLE, TinyMoEModel
-from train.preprocess import pack_sequences, tokenize_corpus
 from train.tokenizer import train_simple_tokenizer
 
 if not TORCH_AVAILABLE:  # pragma: no cover
@@ -25,14 +24,22 @@ import torch
 from safetensors.torch import save_file
 
 
-def _collect_corpus_files(source_dir: Path) -> list[Path]:
+def _collect_corpus_files(
+    source_dir: Path,
+    *,
+    include_datasets: bool,
+) -> list[Path]:
     allowed = {".py", ".md", ".toml", ".json", ".tsx", ".ts", ".jsx", ".js", ".css", ".txt"}
-    blocked_dirs = {".git", "__pycache__", "artifacts", "datasets", "benchmarks/results"}
+    blocked_dirs = {".git", "__pycache__", "artifacts"}
+    if not include_datasets:
+        blocked_dirs.add("datasets")
     files: list[Path] = []
     for path in sorted(source_dir.rglob("*")):
         if not path.is_file():
             continue
         if any(part in blocked_dirs for part in path.parts):
+            continue
+        if "benchmarks/results" in str(path):
             continue
         if path.suffix.lower() in allowed:
             files.append(path)
@@ -65,6 +72,41 @@ def _build_batch(
     return input_ids, labels
 
 
+def _build_train_sequences(
+    *,
+    corpus_files: list[Path],
+    tokenizer,
+    seq_len: int,
+    max_sequences: int,
+    samples_per_file: int,
+) -> list[list[int]]:
+    sequences: list[list[int]] = []
+    eos_id = tokenizer.eos_id
+
+    for path in corpus_files:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        token_ids = tokenizer.encode(text)
+        if len(token_ids) < 8:
+            continue
+
+        if len(token_ids) <= seq_len - 1:
+            sequences.append(token_ids + [eos_id])
+        else:
+            max_windows = max(1, min(samples_per_file, len(token_ids) // max(16, seq_len // 2)))
+            for i in range(max_windows):
+                # Spread windows deterministically across each file for coverage.
+                start = int((i / max_windows) * max(1, len(token_ids) - (seq_len - 1)))
+                chunk = token_ids[start : start + (seq_len - 1)] + [eos_id]
+                sequences.append(chunk)
+                if len(sequences) >= max_sequences:
+                    return sequences
+
+        if len(sequences) >= max_sequences:
+            return sequences
+
+    return sequences
+
+
 def _resolve_device(device_arg: str) -> torch.device:
     if device_arg != "auto":
         return torch.device(device_arg)
@@ -92,6 +134,21 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--log-every", type=int, default=20)
     parser.add_argument("--device", default="auto", help="auto|cpu|cuda|mps")
+    parser.add_argument("--max-sequences", type=int, default=100_000)
+    parser.add_argument("--samples-per-file", type=int, default=256)
+    parser.add_argument("--include-datasets", action="store_true", help="Include files under datasets/")
+    parser.add_argument(
+        "--extra-corpus-file",
+        action="append",
+        default=[],
+        help="Additional text/code file to include in training corpus (repeatable).",
+    )
+    parser.add_argument(
+        "--extra-corpus-dir",
+        action="append",
+        default=[],
+        help="Additional directory to scan for corpus files (repeatable).",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -101,7 +158,18 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    corpus_files = _collect_corpus_files(source_dir)
+    corpus_files = _collect_corpus_files(source_dir, include_datasets=args.include_datasets)
+    for extra_file in args.extra_corpus_file:
+        path = Path(extra_file).resolve()
+        if path.exists() and path.is_file():
+            corpus_files.append(path)
+    for extra_dir in args.extra_corpus_dir:
+        root = Path(extra_dir).resolve()
+        if not root.exists() or not root.is_dir():
+            continue
+        corpus_files.extend(_collect_corpus_files(root, include_datasets=True))
+
+    corpus_files = sorted(set(corpus_files))
     if not corpus_files:
         raise SystemExit(f"No corpus files found under {source_dir}")
 
@@ -109,10 +177,13 @@ def main() -> None:
     tokenizer_path = out_dir / "tokenizer.json"
     tokenizer.to_json(tokenizer_path)
 
-    texts = [path.read_text(encoding="utf-8", errors="ignore") for path in corpus_files]
-    tokenized = tokenize_corpus(texts, tokenizer, append_eos=True)
-    packed = pack_sequences(tokenized, seq_len=args.seq_len)
-    train_seqs = [seq.input_ids for seq in packed if len(seq.input_ids) > 8]
+    train_seqs = _build_train_sequences(
+        corpus_files=corpus_files,
+        tokenizer=tokenizer,
+        seq_len=args.seq_len,
+        max_sequences=args.max_sequences,
+        samples_per_file=args.samples_per_file,
+    )
     if not train_seqs:
         raise SystemExit("No training sequences available after packing")
 

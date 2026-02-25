@@ -8,9 +8,10 @@ from pathlib import Path
 import re
 from typing import Iterable
 
-TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+|\S")
+TOKEN_PATTERN = re.compile(r"\s+|[A-Za-z_][A-Za-z0-9_]*|\d+|\S")
 
 SPECIAL_TOKENS = ["<pad>", "<bos>", "<eos>", "<unk>"]
+_ASCII_BASE_CHARS = [chr(code) for code in range(32, 127)] + ["\n", "\t", "\r"]
 
 
 @dataclass(slots=True)
@@ -38,8 +39,13 @@ class SimpleTokenizer:
         return ids
 
     def decode(self, ids: Iterable[int]) -> str:
-        tokens = [self.id_to_token[idx] if 0 <= idx < len(self.id_to_token) else "<unk>" for idx in ids]
-        return " ".join(tokens)
+        parts: list[str] = []
+        for idx in ids:
+            token = self.id_to_token[idx] if 0 <= idx < len(self.id_to_token) else "<unk>"
+            if token == "<pad>":
+                continue
+            parts.append(token)
+        return "".join(parts)
 
     def to_json(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +75,10 @@ def train_simple_tokenizer(
         text = path.read_text(encoding="utf-8", errors="ignore")
         for token in TOKEN_PATTERN.findall(text):
             counts[token] = counts.get(token, 0) + 1
+
+    # Always include base ASCII chars for robust fallback and reduced <unk> emission.
+    for char in _ASCII_BASE_CHARS:
+        counts[char] = max(counts.get(char, 0), 1)
 
     max_main_vocab = max(vocab_size - len(SPECIAL_TOKENS), 0)
     most_common = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:max_main_vocab]

@@ -1,0 +1,13 @@
+packaging>=26.0
+safetensors>=0.7.0
+torch>=2.10.0
+
+[api]
+fastapi>=0.110
+uvicorn>=0.29
+
+[tokenizer]
+tokenizers>=0.15
+
+[train]
+torch>=2.3
