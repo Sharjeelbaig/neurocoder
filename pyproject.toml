@@ -1,0 +1,27 @@
+[project]
+name = "tinymoe-coder"
+version = "0.1.0"
+description = "From-scratch TinyMoE coding SLM scaffold for React+Tailwind landing page and patch edits"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "TinyMoE Coder Contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+train = ["torch>=2.3"]
+tokenizer = ["tokenizers>=0.15"]
+api = ["fastapi>=0.110", "uvicorn>=0.29"]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

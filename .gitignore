@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+.env
+artifacts/
+datasets/
+benchmarks/results/
+*.safetensors
+*.gguf
+*.pt
+*.bin
