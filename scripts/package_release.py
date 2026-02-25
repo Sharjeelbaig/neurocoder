@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import argparse
+import json
 
 from release.hf_package import build_hf_package
 from release.ollama_package import build_ollama_package
@@ -19,6 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Package TinyMoE for HF and Ollama")
     parser.add_argument("--tokenizer", default="artifacts/tokenizer/tokenizer.json")
     parser.add_argument("--weights", default="", help="Path to model.safetensors")
+    parser.add_argument("--model-config", default="", help="Path to model config JSON")
     parser.add_argument("--out", default="artifacts/release")
     parser.add_argument("--model-name", default="tinymoe-coder")
     args = parser.parse_args()
@@ -27,7 +29,7 @@ def main() -> None:
     hf_dir = out_dir / "hf"
     ollama_dir = out_dir / "ollama"
 
-    model_config = {
+    default_model_config = {
         "architectures": ["TinyMoEModel"],
         "model_type": "tinymoe",
         "context_length": 4096,
@@ -35,6 +37,10 @@ def main() -> None:
         "num_experts": 8,
         "top_k": 2,
     }
+    model_config = default_model_config
+    if args.model_config:
+        config_path = Path(args.model_config)
+        model_config = json.loads(config_path.read_text(encoding="utf-8"))
 
     weights_path = Path(args.weights) if args.weights else None
     hf_result = build_hf_package(
