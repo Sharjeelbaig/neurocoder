@@ -242,6 +242,7 @@ def main() -> None:
         state,
         str(model_path),
         metadata={
+            "format": "pt",
             "stage": "sft",
             "trained_from_scratch": "true",
             "steps": str(args.steps),

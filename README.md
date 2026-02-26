@@ -44,6 +44,16 @@ This is a fast-track implementation scaffold for batches 1-10. The interfaces, v
 ## Batch Commands
 
 ```bash
+# vNext long session (recommended)
+python3 scripts/run_vnext_session.py --profile fast
+python3 scripts/run_vnext_session.py --execute --profile full
+
+# See full runbook:
+# docs/NEUROCODER_VNEXT_SESSION.md
+
+# Build ground-up dataset with privacy scrub (default ban-term: inferencia)
+python3 scripts/build_groundup_dataset_v3.py --landing-count 1200 --patch-count 900 --reasoning-count 300
+
 # Build synthetic curriculum for coding + chat alignment
 python3 scripts/build_curriculum.py --out datasets/curriculum/coding_chat_v1.txt
 
@@ -104,9 +114,18 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 model_id = "Sharjeelbaig/neurocoder"
 tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
-inputs = tok("Write a python function to reverse a string", return_tensors="pt")
-out = model.generate(**inputs, max_new_tokens=48, do_sample=True, temperature=0.7, use_cache=False)
-print(tok.decode(out[0], skip_special_tokens=True))
+prompt = "Write a python function to reverse a string"
+inputs = tok(prompt, return_tensors="pt")
+out = model.generate(
+    **inputs,
+    max_new_tokens=120,
+    do_sample=False,
+    repetition_penalty=1.22,
+    no_repeat_ngram_size=6,
+    use_cache=True,
+)
+text = tok.decode(out[0], skip_special_tokens=True)
+print(text.split("\nAssistant:", 1)[-1].strip())
 PY
 
 # Optional pipeline usage
@@ -118,4 +137,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
 pipe = pipeline("text-generation", model=model, tokenizer=tok)
 print(pipe("Generate a landing page for marketing agency", max_new_tokens=120, do_sample=True, temperature=0.7)[0]["generated_text"])
 PY
+
+# Generic CLI for your own prompts (standard HF API)
+python3 scripts/infer_hf_standard.py --model-id Sharjeelbaig/neurocoder --prompt "hi"
 ```

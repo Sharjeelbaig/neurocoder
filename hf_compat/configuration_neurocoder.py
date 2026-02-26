@@ -23,6 +23,7 @@ class NeuroCoderConfig(PretrainedConfig):
         capacity_factor_train: float = 1.25,
         capacity_factor_infer: float = 1.0,
         dropout: float = 0.0,
+        use_cache: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -35,7 +36,7 @@ class NeuroCoderConfig(PretrainedConfig):
         self.num_hidden_layers = num_layers
         self.num_attention_heads = num_heads
         self.max_position_embeddings = context_length
-        self.use_cache = False
+        self.use_cache = use_cache
         self.ffn_multiplier = ffn_multiplier
         self.moe_every_n_layers = moe_every_n_layers
         self.num_experts = num_experts

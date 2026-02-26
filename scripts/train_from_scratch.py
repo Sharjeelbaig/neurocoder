@@ -242,6 +242,7 @@ def main() -> None:
     if "lm_head.weight" in state_dict and "token_embed.weight" in state_dict:
         state_dict["lm_head.weight"] = state_dict["lm_head.weight"].clone()
     metadata = {
+        "format": "pt",
         "trained_from_scratch": "true",
         "steps": str(args.steps),
         "initial_loss": f"{init_loss:.6f}",

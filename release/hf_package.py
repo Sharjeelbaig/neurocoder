@@ -7,11 +7,28 @@ import json
 from pathlib import Path
 import shutil
 
+from safetensors import safe_open
+from safetensors.torch import load_file, save_file
+
 
 @dataclass(slots=True)
 class HFPackageResult:
     output_dir: str
     files_written: list[str]
+
+
+def _copy_weights_with_pt_metadata(src: Path, dst: Path) -> None:
+    metadata: dict[str, str] = {}
+    with safe_open(str(src), framework="pt") as handle:
+        metadata = dict(handle.metadata() or {})
+
+    if metadata.get("format") == "pt":
+        shutil.copy2(src, dst)
+        return
+
+    tensors = load_file(str(src))
+    metadata["format"] = "pt"
+    save_file(tensors, str(dst), metadata=metadata)
 
 
 
@@ -38,6 +55,7 @@ def build_hf_package(
         hf_config["router_top_k"] = hf_config.pop("top_k")
     hf_config["model_type"] = "neurocoder"
     hf_config["architectures"] = ["NeuroCoderForCausalLM"]
+    hf_config["use_cache"] = bool(hf_config.get("use_cache", True))
     hf_config["bos_token_id"] = bos_id
     hf_config["eos_token_id"] = eos_id
     hf_config["pad_token_id"] = pad_id
@@ -87,6 +105,27 @@ def build_hf_package(
     )
     files_written.append(tokenizer_cfg.name)
 
+    generation_cfg = output_dir / "generation_config.json"
+    generation_cfg.write_text(
+        json.dumps(
+            {
+                "do_sample": True,
+                "temperature": 0.25,
+                "top_p": 0.9,
+                "repetition_penalty": 1.22,
+                "no_repeat_ngram_size": 6,
+                "max_new_tokens": 320,
+                "use_cache": True,
+                "eos_token_id": eos_id,
+                "pad_token_id": eos_id,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    files_written.append(generation_cfg.name)
+
     special_tokens_path = output_dir / "special_tokens_map.json"
     special_tokens_path.write_text(
         json.dumps(
@@ -105,7 +144,7 @@ def build_hf_package(
 
     has_trained_weights = bool(model_weights and model_weights.exists())
     if has_trained_weights:
-        shutil.copy2(model_weights, output_dir / "model.safetensors")
+        _copy_weights_with_pt_metadata(model_weights, output_dir / "model.safetensors")
     else:
         (output_dir / "model.safetensors").write_bytes(
             b"TINYMOE_PLACEHOLDER\nreplace-with-trained-safetensors\n"
@@ -143,8 +182,16 @@ def build_hf_package(
         "\n"
         "prompt = \"Generate a landing page for marketing agency titled Velocity Landing\"\n"
         "inputs = tokenizer(prompt, return_tensors=\"pt\")\n"
-        "outputs = model.generate(**inputs, max_new_tokens=220, temperature=0.7, do_sample=True, use_cache=False)\n"
-        "print(tokenizer.decode(outputs[0], skip_special_tokens=True))\n"
+        "outputs = model.generate(\n"
+        "    **inputs,\n"
+        "    max_new_tokens=220,\n"
+        "    do_sample=False,\n"
+        "    repetition_penalty=1.22,\n"
+        "    no_repeat_ngram_size=6,\n"
+        "    use_cache=True,\n"
+        ")\n"
+        "text = tokenizer.decode(outputs[0], skip_special_tokens=True)\n"
+        "print(text.split(\"\\nAssistant:\", 1)[-1].strip())\n"
         "```\n",
         encoding="utf-8",
     )

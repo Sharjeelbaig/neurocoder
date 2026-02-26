@@ -184,6 +184,7 @@ if TORCH_AVAILABLE:
             super().__init__()
             self.config = config
             self.token_embed = nn.Embedding(config.vocab_size, config.hidden_size)
+            self.pos_embed = nn.Embedding(config.context_length, config.hidden_size)
             self.layers = nn.ModuleList(
                 [
                     TransformerBlock(config, use_moe=((idx + 1) % config.moe_every_n_layers == 0))
@@ -199,7 +200,10 @@ if TORCH_AVAILABLE:
             input_ids: Tensor,
             labels: Tensor | None = None,
         ) -> dict[str, Any]:
-            x = self.token_embed(input_ids)
+            bsz, seq_len = input_ids.shape
+            pos = torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand(bsz, seq_len)
+            pos = pos.clamp_max(self.config.context_length - 1)
+            x = self.token_embed(input_ids) + self.pos_embed(pos)
             aux_loss = torch.tensor(0.0, device=input_ids.device)
             z_loss = torch.tensor(0.0, device=input_ids.device)
             dropped_tokens = 0

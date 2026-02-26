@@ -132,7 +132,11 @@ def main() -> None:
     state = {k: v.detach().cpu().contiguous() for k, v in model.state_dict().items()}
     if "lm_head.weight" in state and "token_embed.weight" in state:
         state["lm_head.weight"] = state["lm_head.weight"].clone()
-    save_file(state, str(model_dir / "model.safetensors"), metadata={"aligned": "true"})
+    save_file(
+        state,
+        str(model_dir / "model.safetensors"),
+        metadata={"format": "pt", "aligned": "true"},
+    )
 
     summary = {
         "model_dir": str(model_dir),
