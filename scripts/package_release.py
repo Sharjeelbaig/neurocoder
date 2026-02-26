@@ -17,12 +17,12 @@ from release.ollama_package import build_ollama_package
 from release.quantize import write_dummy_gguf
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Package TinyMoE for HF and Ollama")
+    parser = argparse.ArgumentParser(description="Package NeuroCoder for HF and Ollama")
     parser.add_argument("--tokenizer", default="artifacts/tokenizer/tokenizer.json")
     parser.add_argument("--weights", default="", help="Path to model.safetensors")
     parser.add_argument("--model-config", default="", help="Path to model config JSON")
     parser.add_argument("--out", default="artifacts/release")
-    parser.add_argument("--model-name", default="tinymoe-coder")
+    parser.add_argument("--model-name", default="neurocoder")
     args = parser.parse_args()
 
     out_dir = Path(args.out)
@@ -49,6 +49,7 @@ def main() -> None:
         model_config=model_config,
         model_weights=weights_path,
         license_text=Path("LICENSE").read_text(encoding="utf-8"),
+        model_name=args.model_name,
     )
 
     gguf_path = out_dir / f"{args.model_name}.Q4_K_M.gguf"

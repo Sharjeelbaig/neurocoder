@@ -47,25 +47,23 @@ This is a fast-track implementation scaffold for batches 1-10. The interfaces, v
 # Build synthetic curriculum for coding + chat alignment
 python3 scripts/build_curriculum.py --out datasets/curriculum/coding_chat_v1.txt
 
-# Train from scratch (MoE checkpoint under 100MB with current defaults)
+# Train from scratch (base MoE checkpoint)
 python3 scripts/train_from_scratch.py \
   --source-dir datasets/curriculum \
   --include-datasets \
-  --out-dir artifacts/trained_v5 \
+  --out-dir artifacts/trained_base \
   --hidden-size 256 --num-layers 8 --num-heads 8 --num-experts 4 \
   --steps 500 --seq-len 256 --batch-size 6
 
-# Optional targeted alignment for critical prompts (hi / how are you / landing page)
-python3 scripts/align_responses.py \
-  --model-dir artifacts/trained_v5 \
-  --dataset datasets/curriculum/critical_alignment.txt \
-  --steps 320
+# Build and run high-quality instruction alignment
+python3 scripts/build_alignment_set.py --out datasets/curriculum/alignment_v2.txt --repeats 800
+python3 scripts/align_responses.py --model-dir artifacts/trained_sft_v3 --dataset datasets/curriculum/alignment_v2.txt --steps 1200
 
 # Inference CLI (with deterministic quality fallback enabled by default)
-python3 scripts/infer_neurocoder.py --model-dir artifacts/release_v5a/hf --prompt "generate a landing page"
+python3 scripts/infer_neurocoder.py --model-dir artifacts/release_sft_v3/hf --prompt "generate a landing page"
 
-# Raw model-only output (disable fallback)
-python3 scripts/infer_neurocoder.py --model-dir artifacts/release_v5a/hf --prompt "generate a landing page" --disable-fallback
+# Raw output path (fallback disabled, stability guards still active)
+python3 scripts/infer_neurocoder.py --model-dir artifacts/release_sft_v3/hf --prompt "generate a landing page" --disable-fallback
 
 # Batch 2: ingest data with license gate
 python3 scripts/run_ingest.py /path/to/source-repo --out datasets/snapshot_v1
@@ -79,6 +77,11 @@ python3 scripts/gen_synthetic.py datasets/snapshot_v1/manifest.jsonl --out datas
 # Batch 8: run narrow benchmark sample
 python3 scripts/run_benchmark.py benchmarks/suites/narrowcoder_v1_sample.jsonl --out benchmarks/results/local
 
-# Batch 9-10: package for HF and Ollama
-python3 scripts/package_release.py --tokenizer artifacts/tokenizer/tokenizer.json --out artifacts/release --model-name tinymoe-coder
+# Batch 9-10: package for HF and Ollama (model name must be neurocoder)
+python3 scripts/package_release.py \
+  --tokenizer artifacts/trained_sft_v3/tokenizer.json \
+  --weights artifacts/trained_sft_v3/model.safetensors \
+  --model-config artifacts/trained_sft_v3/model_config.json \
+  --out artifacts/release_sft_v3 \
+  --model-name neurocoder
 ```

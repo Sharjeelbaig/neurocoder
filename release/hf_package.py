@@ -1,4 +1,4 @@
-"""Hugging Face artifact packager for TinyMoE releases."""
+"""Hugging Face artifact packager for NeuroCoder releases."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ def build_hf_package(
     model_config: dict,
     model_weights: Path | None = None,
     license_text: str = "MIT",
+    model_name: str = "neurocoder",
 ) -> HFPackageResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     files_written: list[str] = []
@@ -54,7 +55,8 @@ def build_hf_package(
     )
     files_written.append(tokenizer_cfg.name)
 
-    if model_weights and model_weights.exists():
+    has_trained_weights = bool(model_weights and model_weights.exists())
+    if has_trained_weights:
         shutil.copy2(model_weights, output_dir / "model.safetensors")
     else:
         (output_dir / "model.safetensors").write_bytes(
@@ -63,10 +65,26 @@ def build_hf_package(
     files_written.append("model.safetensors")
 
     readme = output_dir / "README.md"
+    display_name = model_name.replace("-", " ").title()
+    if has_trained_weights:
+        weights_note = "Includes trained `model.safetensors` weights."
+    else:
+        weights_note = "Contains placeholder weights; replace `model.safetensors` with trained weights."
     readme.write_text(
-        "# TinyMoE Coder\n\n"
-        "From-scratch narrow-domain coding SLM for React+Tailwind generation and unified-diff edits.\n\n"
-        "This package may contain placeholder weights in early development stages.\n",
+        "---\n"
+        "license: mit\n"
+        "language:\n"
+        "- en\n"
+        "tags:\n"
+        "- code\n"
+        "- moe\n"
+        "- react\n"
+        "- tailwind\n"
+        "library_name: pytorch\n"
+        "---\n\n"
+        f"# {display_name}\n\n"
+        "From-scratch narrow-domain coding SLM for React + Tailwind generation and unified-diff edits.\n\n"
+        f"{weights_note}\n",
         encoding="utf-8",
     )
     files_written.append(readme.name)
