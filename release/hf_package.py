@@ -26,12 +26,38 @@ def build_hf_package(
     output_dir.mkdir(parents=True, exist_ok=True)
     files_written: list[str] = []
 
+    tokenizer_payload = json.loads(tokenizer_json.read_text(encoding="utf-8"))
+    vocab = tokenizer_payload.get("vocab", {})
+    pad_id = int(vocab.get("<pad>", 0))
+    bos_id = int(vocab.get("<bos>", 1))
+    eos_id = int(vocab.get("<eos>", 2))
+    unk_id = int(vocab.get("<unk>", 3))
+
+    hf_config = dict(model_config)
+    if "top_k" in hf_config and "router_top_k" not in hf_config:
+        hf_config["router_top_k"] = hf_config.pop("top_k")
+    hf_config["model_type"] = "neurocoder"
+    hf_config["architectures"] = ["NeuroCoderForCausalLM"]
+    hf_config["bos_token_id"] = bos_id
+    hf_config["eos_token_id"] = eos_id
+    hf_config["pad_token_id"] = pad_id
+    hf_config["unk_token_id"] = unk_id
+    hf_config["auto_map"] = {
+        "AutoConfig": "configuration_neurocoder.NeuroCoderConfig",
+        "AutoModelForCausalLM": "modeling_neurocoder.NeuroCoderForCausalLM",
+        "AutoTokenizer": [
+            "tokenization_neurocoder.NeuroCoderTokenizer",
+            None,
+        ],
+    }
+
     config_path = output_dir / "config.json"
-    config_path.write_text(json.dumps(model_config, indent=2, sort_keys=True), encoding="utf-8")
+    config_path.write_text(json.dumps(hf_config, indent=2, sort_keys=True), encoding="utf-8")
     files_written.append(config_path.name)
 
     tokenizer_out = output_dir / "tokenizer.json"
-    shutil.copy2(tokenizer_json, tokenizer_out)
+    tokenizer_payload.setdefault("added_tokens", [])
+    tokenizer_out.write_text(json.dumps(tokenizer_payload, indent=2, sort_keys=True), encoding="utf-8")
     files_written.append(tokenizer_out.name)
 
     tokenizer_cfg = output_dir / "tokenizer_config.json"
@@ -41,6 +67,12 @@ def build_hf_package(
                 "model_max_length": int(model_config.get("context_length", 4096)),
                 "padding_side": "right",
                 "truncation_side": "right",
+                "auto_map": {
+                    "AutoTokenizer": [
+                        "tokenization_neurocoder.NeuroCoderTokenizer",
+                        None,
+                    ],
+                },
                 "special_tokens_map": {
                     "bos_token": "<bos>",
                     "eos_token": "<eos>",
@@ -54,6 +86,22 @@ def build_hf_package(
         encoding="utf-8",
     )
     files_written.append(tokenizer_cfg.name)
+
+    special_tokens_path = output_dir / "special_tokens_map.json"
+    special_tokens_path.write_text(
+        json.dumps(
+            {
+                "bos_token": "<bos>",
+                "eos_token": "<eos>",
+                "pad_token": "<pad>",
+                "unk_token": "<unk>",
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    files_written.append(special_tokens_path.name)
 
     has_trained_weights = bool(model_weights and model_weights.exists())
     if has_trained_weights:
@@ -84,10 +132,35 @@ def build_hf_package(
         "---\n\n"
         f"# {display_name}\n\n"
         "From-scratch narrow-domain coding SLM for React + Tailwind generation and unified-diff edits.\n\n"
-        f"{weights_note}\n",
+        f"{weights_note}\n\n"
+        "## Transformers Usage\n\n"
+        "```python\n"
+        "from transformers import AutoTokenizer, AutoModelForCausalLM\n"
+        "\n"
+        "model_id = \"Sharjeelbaig/neurocoder\"\n"
+        "tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)\n"
+        "model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)\n"
+        "\n"
+        "prompt = \"Generate a landing page for marketing agency titled Velocity Landing\"\n"
+        "inputs = tokenizer(prompt, return_tensors=\"pt\")\n"
+        "outputs = model.generate(**inputs, max_new_tokens=220, temperature=0.7, do_sample=True, use_cache=False)\n"
+        "print(tokenizer.decode(outputs[0], skip_special_tokens=True))\n"
+        "```\n",
         encoding="utf-8",
     )
     files_written.append(readme.name)
+
+    compat_root = Path(__file__).resolve().parents[1] / "hf_compat"
+    compat_files = [
+        "configuration_neurocoder.py",
+        "modeling_neurocoder.py",
+        "tokenization_neurocoder.py",
+    ]
+    for file_name in compat_files:
+        src = compat_root / file_name
+        dst = output_dir / file_name
+        shutil.copy2(src, dst)
+        files_written.append(file_name)
 
     license_path = output_dir / "LICENSE"
     license_path.write_text(license_text + "\n", encoding="utf-8")

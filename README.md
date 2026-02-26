@@ -59,11 +59,24 @@ python3 scripts/train_from_scratch.py \
 python3 scripts/build_alignment_set.py --out datasets/curriculum/alignment_v2.txt --repeats 800
 python3 scripts/align_responses.py --model-dir artifacts/trained_sft_v3 --dataset datasets/curriculum/alignment_v2.txt --steps 1200
 
+# Optional: blend + slice external HF datasets (Tailwind + reasoning)
+python3 scripts/build_hf_mix_dataset.py \
+  --out datasets/curriculum/hf_mix_v1.txt \
+  --manifest datasets/curriculum/hf_mix_v1_manifest.json \
+  --per-dataset 600
+python3 scripts/align_responses.py \
+  --model-dir artifacts/trained_sft_v3 \
+  --dataset datasets/curriculum/hf_mix_v1.txt \
+  --steps 520
+
 # Inference CLI (with deterministic quality fallback enabled by default)
 python3 scripts/infer_neurocoder.py --model-dir artifacts/release_sft_v3/hf --prompt "generate a landing page"
 
 # Raw output path (fallback disabled, stability guards still active)
 python3 scripts/infer_neurocoder.py --model-dir artifacts/release_sft_v3/hf --prompt "generate a landing page" --disable-fallback
+
+# Regression suite for inference quality (runs fallback + disable-fallback modes)
+python3 scripts/test_inference_suite.py --model-dir artifacts/release_hfstd_v2/hf
 
 # Batch 2: ingest data with license gate
 python3 scripts/run_ingest.py /path/to/source-repo --out datasets/snapshot_v1
@@ -84,4 +97,25 @@ python3 scripts/package_release.py \
   --model-config artifacts/trained_sft_v3/model_config.json \
   --out artifacts/release_sft_v3 \
   --model-name neurocoder
+
+# Standard Transformers usage (works with trust_remote_code)
+python3 - <<'PY'
+from transformers import AutoTokenizer, AutoModelForCausalLM
+model_id = "Sharjeelbaig/neurocoder"
+tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
+inputs = tok("Write a python function to reverse a string", return_tensors="pt")
+out = model.generate(**inputs, max_new_tokens=48, do_sample=True, temperature=0.7, use_cache=False)
+print(tok.decode(out[0], skip_special_tokens=True))
+PY
+
+# Optional pipeline usage
+python3 - <<'PY'
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+model_id = "Sharjeelbaig/neurocoder"
+tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
+pipe = pipeline("text-generation", model=model, tokenizer=tok)
+print(pipe("Generate a landing page for marketing agency", max_new_tokens=120, do_sample=True, temperature=0.7)[0]["generated_text"])
+PY
 ```
